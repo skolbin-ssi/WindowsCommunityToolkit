@@ -12,8 +12,6 @@
 
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:contract6NotPresent="http://schemas.microsoft.com/winfx/2006/xaml/presentation?IsApiContractNotPresent(Windows.Foundation.UniversalApiContract,6)"
-                    xmlns:contract6Present="http://schemas.microsoft.com/winfx/2006/xaml/presentation?IsApiContractPresent(Windows.Foundation.UniversalApiContract,6)"
                     xmlns:local="using:Microsoft.Toolkit.Uwp.UI.Controls"
                     xmlns:localprimitives="using:Microsoft.Toolkit.Uwp.UI.Controls.Primitives">
 
@@ -91,6 +89,7 @@
     <StaticResource x:Key="DataGridRowSelectedUnfocusedBackgroundOpacity" ResourceKey="ListAccentLowOpacity"/>
     <StaticResource x:Key="DataGridRowSelectedHoveredUnfocusedBackgroundColor" ResourceKey="SystemAccentColor"/>
     <StaticResource x:Key="DataGridRowSelectedHoveredUnfocusedBackgroundOpacity" ResourceKey="ListAccentMediumOpacity"/>
+    <StaticResource x:Key="DataGridRowHoveredBackgroundColor" ResourceKey="SystemListLowColor"/>
     <StaticResource x:Key="DataGridRowHeaderForegroundBrush" ResourceKey="SystemControlForegroundBaseMediumBrush"/>
     <StaticResource x:Key="DataGridRowHeaderBackgroundBrush" ResourceKey="SystemControlBackgroundAltHighBrush"/>
     <StaticResource x:Key="DataGridRowGroupHeaderBackgroundBrush" ResourceKey="SystemControlBackgroundChromeMediumBrush"/>
@@ -335,11 +334,7 @@
                                 <VisualState x:Name="SeparatorCollapsed"/>
                                 <VisualState x:Name="SeparatorExpanded">
                                     <Storyboard>
-                                        <contract6NotPresent:DoubleAnimation Duration="{ThemeResource ScrollBarsSeparatorExpandDuration}"
-                                            Storyboard.TargetName="BottomRightCorner"
-                                            Storyboard.TargetProperty="Opacity"
-                                            To="1"/>
-                                        <contract6Present:DoubleAnimation Duration="{ThemeResource ScrollBarsSeparatorExpandDuration}"
+                                        <DoubleAnimation Duration="{ThemeResource ScrollBarsSeparatorExpandDuration}"
                                             BeginTime="{ThemeResource ScrollBarsSeparatorExpandBeginTime}"
                                             Storyboard.TargetName="BottomRightCorner"
                                             Storyboard.TargetProperty="Opacity"
@@ -348,11 +343,7 @@
                                 </VisualState>
                                 <VisualState x:Name="SeparatorExpandedWithoutAnimation">
                                     <Storyboard>
-                                        <contract6NotPresent:DoubleAnimation Duration="0"
-                                            Storyboard.TargetName="BottomRightCorner"
-                                            Storyboard.TargetProperty="Opacity"
-                                            To="1"/>
-                                        <contract6Present:DoubleAnimation Duration="0"
+                                        <DoubleAnimation Duration="0"
                                             BeginTime="{ThemeResource ScrollBarsSeparatorExpandBeginTime}"
                                             Storyboard.TargetName="BottomRightCorner"
                                             Storyboard.TargetProperty="Opacity"
@@ -607,7 +598,7 @@
                                 <VisualState x:Name="NormalAlternatingRow"/>
                                 <VisualState x:Name="PointerOver">
                                     <Storyboard>
-                                        <ColorAnimation Storyboard.TargetName="BackgroundRectangle" Storyboard.TargetProperty="(Shape.Fill).(SolidColorBrush.Color)" Duration="0" To="{ThemeResource SystemListLowColor}"/>
+                                        <ColorAnimation Storyboard.TargetName="BackgroundRectangle" Storyboard.TargetProperty="(Shape.Fill).(SolidColorBrush.Color)" Duration="0" To="{ThemeResource DataGridRowHoveredBackgroundColor}"/>
                                     </Storyboard>
                                 </VisualState>
                                 <VisualState x:Name="NormalSelected">

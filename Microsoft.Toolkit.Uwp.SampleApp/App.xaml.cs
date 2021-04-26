@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information.
 
 using System;
+using System.Threading.Tasks;
 using Microsoft.Toolkit.Uwp.Helpers;
 using Microsoft.Toolkit.Uwp.SampleApp.Common;
 using Microsoft.Toolkit.Uwp.SampleApp.SamplePages;
@@ -77,7 +78,7 @@ namespace Microsoft.Toolkit.Uwp.SampleApp
                 await RunAppInitialization(e?.Arguments);
             }
 
-            SystemInformation.TrackAppUse(e);
+            SystemInformation.Instance.TrackAppUse(e);
         }
 
         /// <summary>
@@ -104,7 +105,7 @@ namespace Microsoft.Toolkit.Uwp.SampleApp
         {
             ThemeInjector.InjectThemeResources(Application.Current.Resources);
 
-            // Go fullscreen on Xbox
+            // Go full screen on Xbox
             if (AnalyticsInfo.VersionInfo.GetDeviceFormFactor() == DeviceFormFactor.Xbox)
             {
                 Windows.UI.ViewManagement.ApplicationView.GetForCurrentView().SetDesiredBoundsMode(ApplicationViewBoundsMode.UseCoreWindow);
@@ -163,7 +164,7 @@ namespace Microsoft.Toolkit.Uwp.SampleApp
         /// </summary>
         /// <param name="sender">The source of the suspend request.</param>
         /// <param name="e">Details about the suspend request.</param>
-        private void OnSuspending(object sender, SuspendingEventArgs e)
+        private async void OnSuspending(object sender, SuspendingEventArgs e)
         {
             var deferral = e.SuspendingOperation.GetDeferral();
 
@@ -179,7 +180,18 @@ namespace Microsoft.Toolkit.Uwp.SampleApp
                 // ignore
             }
 
-            deferral.Complete();
+            try
+            {
+                await Task.Delay(2000);
+            }
+            catch
+            {
+                // ignore
+            }
+            finally
+            {
+                deferral.Complete();
+            }
         }
     }
 }

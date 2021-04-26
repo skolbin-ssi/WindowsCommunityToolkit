@@ -11,8 +11,8 @@ using System.Runtime.CompilerServices;
 using Microsoft.Toolkit.Uwp.SampleApp.Common;
 using Microsoft.Toolkit.Uwp.SampleApp.Controls;
 using Microsoft.Toolkit.Uwp.SampleApp.Models;
+using Microsoft.Toolkit.Uwp.UI;
 using Microsoft.Toolkit.Uwp.UI.Controls;
-using Microsoft.Toolkit.Uwp.UI.Extensions;
 using Microsoft.Toolkit.Uwp.UI.Helpers;
 using Windows.System;
 using Windows.System.Profile;
@@ -52,7 +52,7 @@ namespace Microsoft.Toolkit.Uwp.SampleApp
             ThemePicker.SelectedIndex = (int)GetCurrentTheme();
             ThemePicker.SelectionChanged += ThemePicker_SelectionChanged;
 
-            DocumentationTextblock.SetRenderer<SampleAppMarkdownRenderer>();
+            DocumentationTextBlock.SetRenderer<SampleAppMarkdownRenderer>();
 
             ProcessSampleEditorTime();
             XamlCodeEditor.UpdateRequested += XamlCodeEditor_UpdateRequested;
@@ -191,12 +191,12 @@ namespace Microsoft.Toolkit.Uwp.SampleApp
 
             if (CurrentSample != null)
             {
-                if (!string.IsNullOrWhiteSpace(CurrentSample.Type))
+                if (CurrentSample.HasType)
                 {
                     try
                     {
-                        var pageInstance = Activator.CreateInstance(CurrentSample.PageType);
-                        SampleContent.Content = pageInstance;
+                        SamplePage = Activator.CreateInstance(CurrentSample.PageType) as Page;
+                        SampleContent.Content = SamplePage;
 
                         // Some samples use the OnNavigatedTo and OnNavigatedFrom
                         // Can't use Frame here because some samples depend on the current Frame
@@ -206,7 +206,7 @@ namespace Microsoft.Toolkit.Uwp.SampleApp
 
                         if (method != null)
                         {
-                            method.Invoke(pageInstance, new object[] { e });
+                            method.Invoke(SamplePage, new object[] { e });
                         }
                     }
                     catch
@@ -219,7 +219,7 @@ namespace Microsoft.Toolkit.Uwp.SampleApp
                         SamplePage.Loaded += SamplePage_Loaded;
                     }
                 }
-                else
+                else if (!CurrentSample.HasXAMLCode)
                 {
                     _onlyDocumentation = true;
                 }
@@ -271,28 +271,17 @@ namespace Microsoft.Toolkit.Uwp.SampleApp
                     InfoAreaPivot.Items.Add(CSharpPivotItem);
                 }
 
-                if (CurrentSample.HasJavaScriptCode)
-                {
-                    var code = await CurrentSample.GetJavaScriptSourceAsync();
-
-                    JavaScriptCodeRenderer.SetCode(code, "js");
-                    InfoAreaPivot.Items.Add(JavaScriptPivotItem);
-                }
-
                 if (CurrentSample.HasDocumentation)
                 {
-#pragma warning disable SA1008 // Opening parenthesis must be spaced correctly
-                    var (contents, path) = await CurrentSample.GetDocumentationAsync();
-#pragma warning restore SA1008 // Opening parenthesis must be spaced correctly
-                    documentationPath = path;
+                    var contents = await CurrentSample.GetDocumentationAsync();
                     if (!string.IsNullOrWhiteSpace(contents))
                     {
-                        DocumentationTextblock.Text = contents;
+                        DocumentationTextBlock.Text = contents;
                         InfoAreaPivot.Items.Add(DocumentationPivotItem);
                     }
                 }
 
-                // Hide the Github button if there isn't a CodeUrl.
+                // Hide the GitHub button if there isn't a CodeUrl.
                 if (string.IsNullOrEmpty(CurrentSample.CodeUrl))
                 {
                     GithubButton.Visibility = Visibility.Collapsed;
@@ -335,7 +324,7 @@ namespace Microsoft.Toolkit.Uwp.SampleApp
         {
             base.OnNavigatedFrom(e);
 
-            if (SamplePage != null)
+            if (SamplePage != null && CurrentSample.HasType)
             {
                 MethodInfo method = CurrentSample.PageType.GetMethod(
                     "OnNavigatedFrom",
@@ -345,6 +334,8 @@ namespace Microsoft.Toolkit.Uwp.SampleApp
                 {
                     method.Invoke(SamplePage, new object[] { e });
                 }
+
+                SamplePage = null;
             }
 
             XamlCodeEditor = null;
@@ -356,6 +347,8 @@ namespace Microsoft.Toolkit.Uwp.SampleApp
 
         private void SamplePage_Loaded(object sender, RoutedEventArgs e)
         {
+            SamplePage.Loaded -= SamplePage_Loaded;
+
             if (CurrentSample != null && CurrentSample.HasXAMLCode)
             {
                 _lastRenderedProperties = true;
@@ -421,14 +414,6 @@ namespace Microsoft.Toolkit.Uwp.SampleApp
 
                 return;
             }
-
-            if (CurrentSample.HasJavaScriptCode && InfoAreaPivot.SelectedItem == JavaScriptPivotItem)
-            {
-                var code = await CurrentSample.GetJavaScriptSourceAsync();
-                JavaScriptCodeRenderer.SetCode(code, "js");
-
-                return;
-            }
         }
 
         private async void XamlCodeEditor_UpdateRequested(object sender, EventArgs e)
@@ -439,13 +424,19 @@ namespace Microsoft.Toolkit.Uwp.SampleApp
             });
         }
 
-        private async void DocumentationTextblock_OnLinkClicked(object sender, LinkClickedEventArgs e)
+        private async void DocumentationTextBlock_OnLinkClicked(object sender, LinkClickedEventArgs e)
         {
             TrackingManager.TrackEvent("Link", e.Link);
             var link = e.Link;
-            if (e.Link.EndsWith(".md"))
+            if (link.EndsWith(".md"))
             {
-                link = string.Format("https://docs.microsoft.com/en-us/windows/communitytoolkit/{0}/{1}", CurrentSample.CategoryName.ToLower(), link.Replace(".md", string.Empty));
+                // Link to one of our other documents, so we'll construct the proper link here
+                link = string.Format("https://docs.microsoft.com/windows/communitytoolkit/{0}/{1}", CurrentSample.RemoteDocumentationPath, link.Replace(".md", string.Empty));
+            }
+            else if (link.StartsWith("/"))
+            {
+                // We don't root our links to other docs.microsoft.com pages anymore, so we'll add it here.
+                link = string.Format("https://docs.microsoft.com{0}", link);
             }
 
             if (Uri.TryCreate(link, UriKind.Absolute, out Uri result))
@@ -454,7 +445,7 @@ namespace Microsoft.Toolkit.Uwp.SampleApp
             }
         }
 
-        private async void DocumentationTextblock_ImageResolving(object sender, ImageResolvingEventArgs e)
+        private async void DocumentationTextBlock_ImageResolving(object sender, ImageResolvingEventArgs e)
         {
             var deferral = e.GetDeferral();
             BitmapImage image = null;
@@ -462,15 +453,21 @@ namespace Microsoft.Toolkit.Uwp.SampleApp
             // Determine if the link is not absolute, meaning it is relative.
             if (!Uri.TryCreate(e.Url, UriKind.Absolute, out Uri url))
             {
-                url = new Uri(documentationPath + e.Url);
-            }
+                var imageStream = await CurrentSample.GetImageStream(CurrentSample.GetOnlineResourcePath(e.Url));
 
-            if (url.Scheme == "ms-appx")
+                if (imageStream != null)
+                {
+                    image = new BitmapImage();
+                    await image.SetSourceAsync(imageStream);
+                }
+            }
+            else if (url.Scheme == "ms-appx")
             {
                 image = new BitmapImage(url);
             }
             else
             {
+                // Cache a remote image from the internet.
                 var imageStream = await CurrentSample.GetImageStream(url);
 
                 if (imageStream != null)
@@ -505,6 +502,11 @@ namespace Microsoft.Toolkit.Uwp.SampleApp
 
         private void UpdateXamlRender(string text)
         {
+            if (XamlCodeEditor == null)
+            {
+                return;
+            }
+
             // Hide any Previous Errors
             XamlCodeEditor.ClearErrors();
 
@@ -521,24 +523,30 @@ namespace Microsoft.Toolkit.Uwp.SampleApp
 
             if (element != null)
             {
-                // Add element to main panel
-                if (SamplePage == null)
-                {
-                    return;
-                }
+                // Add element to main panel or sub-panel
+                FrameworkElement root = null;
 
-                var root = SamplePage.FindDescendantByName("XamlRoot");
-
-                if (root is Panel)
+                if (CurrentSample.HasType)
                 {
-                    // If we've defined a 'XamlRoot' element to host us as a panel, use that.
-                    (root as Panel).Children.Clear();
-                    (root as Panel).Children.Add(element);
+                    root = SamplePage?.FindDescendant("XamlRoot");
+
+                    if (root is Panel)
+                    {
+                        // If we've defined a 'XamlRoot' element to host us as a panel, use that.
+                        (root as Panel).Children.Clear();
+                        (root as Panel).Children.Add(element);
+                    }
+                    else
+                    {
+                        // if we didn't find a XamlRoot host, then we replace the entire content of
+                        // the provided sample page with the XAML.
+                        SamplePage.Content = element;
+                    }
                 }
                 else
                 {
-                    // Otherwise, just replace the entire page's content
-                    SamplePage.Content = element;
+                    // Otherwise, just replace our entire presenter's content
+                    SampleContent.Content = element;
                 }
 
                 // Tell the page we've finished with an update to the XAML contents, after the control has rendered.
@@ -592,8 +600,8 @@ namespace Microsoft.Toolkit.Uwp.SampleApp
                 if (XamlCodeEditor.TimeSampleEditedFirst != DateTime.MinValue &&
                     XamlCodeEditor.TimeSampleEditedLast != DateTime.MinValue)
                 {
-                    int secondsEdditingSample = (int)Math.Floor((XamlCodeEditor.TimeSampleEditedLast - XamlCodeEditor.TimeSampleEditedFirst).TotalSeconds);
-                    TrackingManager.TrackEvent("xamleditor", "edited", CurrentSample.Name, secondsEdditingSample);
+                    int secondsEditingSample = (int)Math.Floor((XamlCodeEditor.TimeSampleEditedLast - XamlCodeEditor.TimeSampleEditedFirst).TotalSeconds);
+                    TrackingManager.TrackEvent("xamleditor", "edited", CurrentSample.Name, secondsEditingSample);
                 }
                 else
                 {
@@ -686,7 +694,8 @@ namespace Microsoft.Toolkit.Uwp.SampleApp
             }
         }
 
-        private Page SamplePage => SampleContent.Content as Page;
+        // The Loaded Instance of the backing .xaml.cs Page (if any)
+        private Page SamplePage { get; set; }
 
         private bool CanChangePaneState => !_onlyDocumentation;
 
@@ -698,7 +707,6 @@ namespace Microsoft.Toolkit.Uwp.SampleApp
 
         private PaneState _paneState;
         private bool _onlyDocumentation;
-        private string documentationPath;
 
         private ThemeListener _themeListener;
 
