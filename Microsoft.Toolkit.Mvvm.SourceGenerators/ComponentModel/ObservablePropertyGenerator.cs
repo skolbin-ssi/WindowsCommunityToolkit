@@ -41,6 +41,15 @@ namespace Microsoft.Toolkit.Mvvm.SourceGenerators
                 return;
             }
 
+            // Validate the language version. Note that we're emitting this diagnostic in each generator (excluding the one
+            // only emitting the nullability annotation attributes if missing) so that the diagnostic is emitted only when
+            // users are using one of these generators, and not by default as soon as they add a reference to the MVVM Toolkit.
+            // This ensures that users not using any of the source generators won't be broken when upgrading to this new version.
+            if (context.ParseOptions is not CSharpParseOptions { LanguageVersion: >= LanguageVersion.CSharp9 })
+            {
+                context.ReportDiagnostic(Diagnostic.Create(UnsupportedCSharpLanguageVersionError, null));
+            }
+
             // Sets of discovered property names
             HashSet<string>
                 propertyChangedNames = new(),
@@ -240,6 +249,14 @@ namespace Microsoft.Toolkit.Mvvm.SourceGenerators
                 }
             }
 
+            // In case the backing field is exactly named "value", we need to add the "this." prefix to ensure that comparisons and assignments
+            // with it in the generated setter body are executed correctly and without conflicts with the implicit value parameter.
+            ExpressionSyntax fieldExpression = fieldSymbol.Name switch
+            {
+                "value" => MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, ThisExpression(), IdentifierName("value")),
+                string name => IdentifierName(name)
+            };
+
             BlockSyntax setterBlock;
 
             if (validationAttributes.Count > 0)
@@ -263,10 +280,10 @@ namespace Microsoft.Toolkit.Mvvm.SourceGenerators
 
                     // Generate the inner setter block as follows:
                     //
-                    // if (!global::System.Collections.Generic.EqualityComparer<<FIELD_TYPE>>.Default.Equals(<FIELD_NAME>, value))
+                    // if (!global::System.Collections.Generic.EqualityComparer<<FIELD_TYPE>>.Default.Equals(this.<FIELD_NAME>, value))
                     // {
                     //     OnPropertyChanging(global::Microsoft.Toolkit.Mvvm.ComponentModel.__Internals.__KnownINotifyPropertyChangedOrChangingArgs.PropertyNamePropertyChangingEventArgs); // Optional
-                    //     <FIELD_NAME> = value;
+                    //     this.<FIELD_NAME> = value;
                     //     OnPropertyChanged(global::Microsoft.Toolkit.Mvvm.ComponentModel.__Internals.__KnownINotifyPropertyChangedOrChangingArgs.PropertyNamePropertyChangedEventArgs);
                     //     ValidateProperty(value, <PROPERTY_NAME>);
                     //     OnPropertyChanged(global::Microsoft.Toolkit.Mvvm.ComponentModel.__Internals.__KnownINotifyPropertyChangedOrChangingArgs.Property1PropertyChangedEventArgs); // Optional
@@ -291,7 +308,7 @@ namespace Microsoft.Toolkit.Mvvm.SourceGenerators
                                             IdentifierName("Default")),
                                         IdentifierName("Equals")))
                                 .AddArgumentListArguments(
-                                    Argument(IdentifierName(fieldSymbol.Name)),
+                                    Argument(fieldExpression),
                                     Argument(IdentifierName("value")))),
                             Block(
                                 ExpressionStatement(
@@ -303,7 +320,7 @@ namespace Microsoft.Toolkit.Mvvm.SourceGenerators
                                 ExpressionStatement(
                                     AssignmentExpression(
                                         SyntaxKind.SimpleAssignmentExpression,
-                                        IdentifierName(fieldSymbol.Name),
+                                        fieldExpression,
                                         IdentifierName("value"))),
                                 ExpressionStatement(
                                     InvocationExpression(IdentifierName("OnPropertyChanged"))
@@ -346,7 +363,7 @@ namespace Microsoft.Toolkit.Mvvm.SourceGenerators
                     ExpressionStatement(
                         AssignmentExpression(
                             SyntaxKind.SimpleAssignmentExpression,
-                            IdentifierName(fieldSymbol.Name),
+                            fieldExpression,
                             IdentifierName("value"))),
                     ExpressionStatement(
                         InvocationExpression(IdentifierName("OnPropertyChanged"))
@@ -384,7 +401,7 @@ namespace Microsoft.Toolkit.Mvvm.SourceGenerators
                                         IdentifierName("Default")),
                                     IdentifierName("Equals")))
                             .AddArgumentListArguments(
-                                    Argument(IdentifierName(fieldSymbol.Name)),
+                                    Argument(fieldExpression),
                                     Argument(IdentifierName("value")))),
                         updateAndNotificationBlock));
             }
@@ -426,7 +443,7 @@ namespace Microsoft.Toolkit.Mvvm.SourceGenerators
                     AttributeList(SingletonSeparatedList(Attribute(IdentifierName("global::System.Diagnostics.DebuggerNonUserCode")))),
                     AttributeList(SingletonSeparatedList(Attribute(IdentifierName("global::System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage")))))
                 .AddAttributeLists(validationAttributes.Select(static a => AttributeList(SingletonSeparatedList(a))).ToArray())
-                .WithLeadingTrivia(leadingTrivia)
+                .WithLeadingTrivia(leadingTrivia.Where(static trivia => !trivia.IsKind(SyntaxKind.RegionDirectiveTrivia) && !trivia.IsKind(SyntaxKind.EndRegionDirectiveTrivia)))
                 .AddModifiers(Token(SyntaxKind.PublicKeyword))
                 .AddAccessorListAccessors(
                     AccessorDeclaration(SyntaxKind.GetAccessorDeclaration)
@@ -442,7 +459,7 @@ namespace Microsoft.Toolkit.Mvvm.SourceGenerators
         /// <param name="fieldSymbol">The input <see cref="IFieldSymbol"/> instance to process.</param>
         /// <returns>The generated property name for <paramref name="fieldSymbol"/>.</returns>
         [Pure]
-        private static string GetGeneratedPropertyName(IFieldSymbol fieldSymbol)
+        public static string GetGeneratedPropertyName(IFieldSymbol fieldSymbol)
         {
             string propertyName = fieldSymbol.Name;
 

@@ -4,8 +4,6 @@
 
 using System.ComponentModel;
 
-using Microsoft.Toolkit.Uwp.UI.Controls.Design.Properties;
-
 using Microsoft.VisualStudio.DesignTools.Extensibility;
 using Microsoft.VisualStudio.DesignTools.Extensibility.Metadata;
 
@@ -25,6 +23,7 @@ namespace Microsoft.Toolkit.Uwp.UI.Controls.Design
                         new EditorBrowsableAttribute(EditorBrowsableState.Advanced)
                     );
                     b.AddCustomAttributes(nameof(ListDetailsView.ListPaneBackground), new CategoryAttribute(Resources.CategoryBrush));
+                    b.AddCustomAttributes(nameof(ListDetailsView.DetailsPaneBackground), new CategoryAttribute(Resources.CategoryBrush));
                     b.AddCustomAttributes(nameof(ListDetailsView.ListHeader), new CategoryAttribute(Resources.CategoryCommon));
                     b.AddCustomAttributes(nameof(ListDetailsView.ListHeaderTemplate),
                         new CategoryAttribute(Resources.CategoryAppearance),
@@ -33,6 +32,11 @@ namespace Microsoft.Toolkit.Uwp.UI.Controls.Design
                     b.AddCustomAttributes(nameof(ListDetailsView.ListPaneWidth), new CategoryAttribute(Resources.CategoryAppearance));
                     b.AddCustomAttributes(nameof(ListDetailsView.NoSelectionContent), new CategoryAttribute(Resources.CategoryCommon));
                     b.AddCustomAttributes(nameof(ListDetailsView.NoSelectionContentTemplate),
+                        new CategoryAttribute(Resources.CategoryCommon),
+                        new EditorBrowsableAttribute(EditorBrowsableState.Advanced)
+                    );
+                    AddCustomAttributes(nameof(ListDetailsView.ListPaneNoItemsContent), new CategoryAttribute(Resources.CategoryCommon));
+                    b.AddCustomAttributes(nameof(ListDetailsView.ListPaneNoItemsContentTemplate),
                         new CategoryAttribute(Resources.CategoryCommon),
                         new EditorBrowsableAttribute(EditorBrowsableState.Advanced)
                     );

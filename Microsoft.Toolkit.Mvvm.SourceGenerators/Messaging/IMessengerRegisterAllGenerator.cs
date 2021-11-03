@@ -13,6 +13,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 using Microsoft.Toolkit.Mvvm.SourceGenerators.Extensions;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
+using static Microsoft.Toolkit.Mvvm.SourceGenerators.Diagnostics.DiagnosticDescriptors;
 
 namespace Microsoft.Toolkit.Mvvm.SourceGenerators
 {
@@ -34,6 +35,12 @@ namespace Microsoft.Toolkit.Mvvm.SourceGenerators
             // Get the syntax receiver with the candidate nodes
             if (context.SyntaxContextReceiver is not SyntaxReceiver syntaxReceiver ||
                 syntaxReceiver.GatheredInfo.Count == 0)
+            {
+                return;
+            }
+
+            // Like in the ObservableValidator.ValidateALlProperties generator, execution is skipped if C# >= 8.0 isn't available
+            if (context.ParseOptions is not CSharpParseOptions { LanguageVersion: >= LanguageVersion.CSharp8 })
             {
                 return;
             }

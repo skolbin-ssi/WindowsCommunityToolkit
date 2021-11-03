@@ -7,6 +7,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
+using System.Diagnostics.CodeAnalysis;
 using System.Diagnostics.Contracts;
 using System.Linq;
 using System.Linq.Expressions;
@@ -137,7 +138,7 @@ namespace Microsoft.Toolkit.Mvvm.ComponentModel
         /// the <see cref="ObservableObject.PropertyChanging"/> and <see cref="ObservableObject.PropertyChanged"/> events
         /// are not raised if the current and new value for the target property are the same.
         /// </remarks>
-        protected bool SetProperty<T>(ref T field, T newValue, bool validate, [CallerMemberName] string? propertyName = null)
+        protected bool SetProperty<T>([NotNullIfNotNull("newValue")] ref T field, T newValue, bool validate, [CallerMemberName] string? propertyName = null)
         {
             bool propertyChanged = SetProperty(ref field, newValue, propertyName);
 
@@ -162,7 +163,7 @@ namespace Microsoft.Toolkit.Mvvm.ComponentModel
         /// <param name="validate">If <see langword="true"/>, <paramref name="newValue"/> will also be validated.</param>
         /// <param name="propertyName">(optional) The name of the property that changed.</param>
         /// <returns><see langword="true"/> if the property was changed, <see langword="false"/> otherwise.</returns>
-        protected bool SetProperty<T>(ref T field, T newValue, IEqualityComparer<T> comparer, bool validate, [CallerMemberName] string? propertyName = null)
+        protected bool SetProperty<T>([NotNullIfNotNull("newValue")] ref T field, T newValue, IEqualityComparer<T> comparer, bool validate, [CallerMemberName] string? propertyName = null)
         {
             bool propertyChanged = SetProperty(ref field, newValue, comparer, propertyName);
 
@@ -487,6 +488,21 @@ namespace Microsoft.Toolkit.Mvvm.ComponentModel
             // Fallback method to create the delegate with a compiled LINQ expression
             static Action<object> GetValidationActionFallback(Type type)
             {
+                // Get the collection of all properties to validate
+                (string Name, MethodInfo GetMethod)[] validatableProperties = (
+                    from property in type.GetProperties(BindingFlags.Instance | BindingFlags.Public)
+                    where property.GetIndexParameters().Length == 0 &&
+                          property.GetCustomAttributes<ValidationAttribute>(true).Any()
+                    let getMethod = property.GetMethod
+                    where getMethod is not null
+                    select (property.Name, getMethod)).ToArray();
+
+                // Short path if there are no properties to validate
+                if (validatableProperties.Length == 0)
+                {
+                    return static _ => { };
+                }
+
                 // MyViewModel inst0 = (MyViewModel)arg0;
                 ParameterExpression arg0 = Expression.Parameter(typeof(object));
                 UnaryExpression inst0 = Expression.Convert(arg0, type);
@@ -512,14 +528,10 @@ namespace Microsoft.Toolkit.Mvvm.ComponentModel
                 // ObservableValidator externally, but that is fine because IL doesn't really have
                 // a concept of member visibility, that's purely a C# build-time feature.
                 BlockExpression body = Expression.Block(
-                    from property in type.GetProperties(BindingFlags.Instance | BindingFlags.Public)
-                    where property.GetIndexParameters().Length == 0 &&
-                          property.GetCustomAttributes<ValidationAttribute>(true).Any()
-                    let getter = property.GetMethod
-                    where getter is not null
+                    from property in validatableProperties
                     select Expression.Call(inst0, validateMethod, new Expression[]
                     {
-                        Expression.Convert(Expression.Call(inst0, getter), typeof(object)),
+                        Expression.Convert(Expression.Call(inst0, property.GetMethod), typeof(object)),
                         Expression.Constant(property.Name)
                     }));
 
